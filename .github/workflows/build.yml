@@ -23,19 +23,34 @@ jobs:
 
       - run: npm install
 
-      - name: Copy fonts into app (offline use)
+      - name: Copy fonts into app
         run: |
           mkdir -p www/fonts
           cp -r node_modules/@fontsource/vazirmatn www/fonts/vazirmatn
           cp -r node_modules/@fontsource/roboto-slab www/fonts/roboto-slab
 
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release-key.jks
+
       - run: npx cap add android
 
       - run: npx cap sync android
 
-      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - name: Build signed Release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          npx cap build android \
+            --androidreleasetype APK \
+            --keystorepath "$GITHUB_WORKSPACE/release-key.jks" \
+            --keystorepass "$KEYSTORE_PASSWORD" \
+            --keystorealias "$KEY_ALIAS" \
+            --keystorealiaspass "$KEY_PASSWORD"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backgammon-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: backgammon-apk-release
+          path: android/app/build/outputs/apk/release/app-release.apk
