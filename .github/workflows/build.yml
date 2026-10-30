@@ -28,12 +28,14 @@ jobs:
           cp -r node_modules/@fontsource/vazirmatn www/fonts/vazirmatn
           cp -r node_modules/@fontsource/roboto-slab www/fonts/roboto-slab
 
+      - run: npx cap add android
+
       - name: Generate Android App Icon
         run: |
           npm install --no-save @capacitor/assets
+          cp assets/icon-only.png assets/icon.png
           npx capacitor-assets generate --android --assetPath assets
 
-      - run: npx cap add android
       - run: npx cap sync android
 
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
