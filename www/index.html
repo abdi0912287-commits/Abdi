@@ -300,12 +300,15 @@
   .results .row{padding:5px 0;border-bottom:1px dashed rgba(255,255,255,.08);color:var(--ivory);}
   .results .row:last-child{border-bottom:none;}
   .results .empty{color:var(--ivory-dim);text-align:center;padding:6px;}
-  .timer-box{display:flex;align-items:center;justify-content:center;gap:10px;margin:14px 0 0;}
+  .timer-box{display:flex;align-items:center;justify-content:center;gap:10px 22px;margin:14px 0 0;flex-wrap:wrap;}
+  .timer-box .tcol{display:flex;flex-direction:column;align-items:center;}
   .timer-box .tlabel{font-size:12px;color:var(--ivory-dim);}
-  .timer-box .tval{font-size:26px;font-weight:700;color:var(--gold-light);letter-spacing:1px;direction:ltr;min-width:84px;text-align:center;}
+  .timer-box .tval{font-size:26px;font-weight:700;color:var(--gold-light);letter-spacing:1px;direction:ltr;min-width:84px;text-align:center;line-height:1.3;}
   .timer-box button{background:var(--walnut-600);color:var(--ivory);border:1px solid var(--gold);font-size:12px;padding:7px 12px;}
   .results .meta{font-size:11px;color:var(--ivory-dim);margin-top:2px;}
   .res-summary{text-align:center;font-size:12px;color:var(--gold-light);margin-bottom:4px;}
+  .g{font-size:11px;color:var(--ivory-dim);margin-top:2px;padding-right:10px;}
+  .cur-games{margin-top:6px;}
 </style>
 </head>
 <body>
@@ -322,7 +325,7 @@
     <div class="pair-row">
       بازی فعلی:
       <select id="selA"></select> ⚔ <select id="selB"></select>
-      <button id="btnNewMatch">دست جدید</button>
+      <button id="btnNewMatch">▶ شروع دست جدید</button>
     </div>
 
     <div class="players">
@@ -330,7 +333,8 @@
       <div class="player" id="playerB"><div class="matches" id="curNameB"></div><div class="score num" id="scoreB">0</div></div>
     </div>
 
-    <div class="timer-box"><span class="tlabel">⏱ زمان این دست</span><span class="tval num" id="timerVal">00:00</span><button id="btnTimer">▶ شروع</button></div>
+    <div class="timer-box"><div class="tcol"><span class="tlabel">⏱ بازی جاری</span><span class="tval num" id="gameVal">00:00</span></div><div class="tcol"><span class="tlabel">⏱ کل دست</span><span class="tval num" id="timerVal">00:00</span></div><button id="btnTimer">▶ شروع</button></div>
+    <div class="cur-games" id="curGames"></div>
 
     <div class="cube-wrap"><div class="cube" id="cubeEl"><div class="val num" id="cubeVal">1</div><div class="lbl">دابلینگ کیوب</div></div></div>
     <div class="owner-line" id="ownerLine"></div>
@@ -346,7 +350,7 @@
       <div class="win-col"><div class="section-title">ثبت برد <span id="winNameB"></span></div><div class="mult-row" id="multRowB"></div><button class="btn-win" id="btnWinB">ثبت برد</button></div>
     </div>
 
-    <div class="match-banner" id="matchBanner" style="display:none;"><div class="title" id="matchBannerTitle"></div><div style="font-size:12px;color:var(--ivory-dim)">نتیجه ثبت شد. برای ادامه، بازیکنان بعدی را انتخاب کنید و «دست جدید» را بزنید.</div></div>
+    <div class="match-banner" id="matchBanner" style="display:none;"><div class="title" id="matchBannerTitle"></div><div style="font-size:12px;color:var(--ivory-dim)">نتیجه ثبت شد. برای ادامه، بازیکنان بعدی را انتخاب کنید و «شروع دست جدید» را بزنید.</div></div>
 
     <div class="settings-row">امتیاز هر دست: <input type="number" id="targetInput" min="1"></div>
     <div class="settings-row"><label><input type="checkbox" id="crawfordChk" style="width:auto"> قانون کراوفورد (ممنوعیت دابل در بازیِ اولی که یکی به یک امتیاز مانده به سقف می‌رسد)</label></div>
@@ -369,7 +373,7 @@
 (function(){
   const KEY='backgammon-3p';
   const newTimer=()=>({elapsed:0,since:null,startedAt:null,finished:false});
-  const def=()=>({target:7,names:["","",""],pair:[0,1],sa:0,sb:0,cube:1,owner:null,wins:[0,0,0],games:[0,0,0],matches:[],log:[],crawfordRule:true,crawfordUsed:false,timer:newTimer(),mid:0});
+  const def=()=>({target:7,names:["","",""],pair:[0,1],sa:0,sb:0,cube:1,owner:null,wins:[0,0,0],games:[0,0,0],matches:[],log:[],crawfordRule:true,crawfordUsed:false,timer:newTimer(),mid:0,curGames:[],gmark:0});
   let state=def(),pending=null,matchOver=false,mult={a:1,b:1},undoStack=[],redoStack=[];
   const el=id=>document.getElementById(id);
   const idx=s=>state.pair[s==='a'?0:1];
@@ -382,6 +386,9 @@
   const pad=n=>String(n).padStart(2,'0');
   const fmt=sec=>{sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),x=sec%60;return (h?h+':'+pad(m):pad(m))+':'+pad(x);};
   const fdate=ts=>{try{const d=new Date(ts);return d.toLocaleDateString('fa-IR')+' '+d.toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});}catch(e){return new Date(ts).toLocaleString();}};
+  const ftime=()=>{try{return new Date().toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});}catch(e){return new Date().toLocaleTimeString();}};
+  const kindLbl=k=>k===0?'رد دابل':(['','ساده','گمون','مارس'][k]||'');
+  const gameLine=g=>`<div class="g">بازی ${fa(g.n)}: ${esc(g.nw)} برد (${kindLbl(g.k)}، ${fa(g.pts)} امتیاز) · ${esc(g.nl)} باخت · ⏱ ${fa(fmt(g.dur))}</div>`;
   const addLog=t=>state.log.push(t);
   // ----- تایمر -----
   const timerMs=()=>{const t=state.timer;return t.elapsed+(t.since?Date.now()-t.since:0);};
@@ -391,6 +398,7 @@
   function renderTimer(){
     const t=state.timer,over=matchOver||t.finished;
     el('timerVal').textContent=fmt(timerMs()/1000);
+    el('gameVal').textContent=over?'00:00':fmt((timerMs()-(state.gmark||0))/1000);
     const b=el('btnTimer');
     b.textContent=over?'🏁 پایان':(t.since?'⏸ توقف':(t.elapsed>0?'▶ ادامه':'▶ شروع'));
     b.disabled=over;
@@ -401,6 +409,8 @@
     else if(state.names.every((n,i)=>n===o[i]))state.names=["","",""];
     if(!state.timer||typeof state.timer!=='object')state.timer=newTimer();
     if(!Array.isArray(state.matches))state.matches=[];
+    if(!Array.isArray(state.curGames))state.curGames=[];
+    if(typeof state.gmark!=='number')state.gmark=0;
   }
   const snap=()=>JSON.stringify({state,pending,matchOver,mult});
   function restore(s){
@@ -425,15 +435,18 @@
       const w=state.sa>=t?'a':'b';
       state.wins[idx(w)]++;
       const ms=timerMs();timerPause();state.timer.finished=true;
-      state.matches.push({a:idx('a'),b:idx('b'),sa:state.sa,sb:state.sb,w:idx(w),na:dn(idx('a')),nb:dn(idx('b')),nw:dn(idx(w)),dur:Math.round(ms/1000),start:state.timer.startedAt,end:Date.now()});
-      addLog(`دست با برد ${nm(w)} تمام شد (${state.sa} - ${state.sb})`);
+      state.matches.push({a:idx('a'),b:idx('b'),sa:state.sa,sb:state.sb,w:idx(w),na:dn(idx('a')),nb:dn(idx('b')),nw:dn(idx(w)),dur:Math.round(ms/1000),start:state.timer.startedAt,end:Date.now(),games:state.curGames.slice()});
+      addLog(`دست با برد ${nm(w)} تمام شد (${state.sa} - ${state.sb}) · مدت: ${fa(fmt(ms/1000))}`);
     }
   }
-  function award(side,points,txt){
+  function award(side,points,txt,kind){
     const wasC=isCrawford();
     if(side==='a')state.sa+=points;else state.sb+=points;
     state.games[idx(side)]++;
-    addLog(txt);
+    const nowMs=timerMs(),gd=Math.round((nowMs-(state.gmark||0))/1000);
+    state.curGames.push({n:state.curGames.length+1,w:idx(side),l:idx(oth(side)),nw:nm(side),nl:nm(oth(side)),pts:points,k:kind,dur:gd});
+    state.gmark=nowMs;
+    addLog(txt+` · مدت بازی: ${fa(fmt(gd))}`);
     checkOver();
     if(!matchOver){state.cube=1;state.owner=null;if(wasC){state.crawfordUsed=true;addLog('بازی کراوفورد تمام شد؛ دابل از بازی بعد آزاد است');}}
     mult={a:1,b:1};
@@ -455,19 +468,19 @@
     if(!pending)return;push();
     const by=pending.by;pending=null;
     addLog(`${nm(oth(by))} دابل را رد کرد`);
-    award(by,state.cube,`${nm(by)} با رد دابل ${state.cube} امتیاز گرفت`);done();
+    award(by,state.cube,`${nm(by)} با رد دابل ${state.cube} امتیاز گرفت`,0);done();
   }
   function recordWin(s){
     if(pending||matchOver)return;timerStart();push();
     const p=state.cube*mult[s];
-    award(s,p,`${nm(s)} با برد ${p} امتیاز گرفت`);done();
+    award(s,p,`${nm(s)} با برد ${p} امتیاز گرفت`,mult[s]);done();
   }
   function resetMatch(){
-    state.sa=0;state.sb=0;state.crawfordUsed=false;state.cube=1;state.owner=null;pending=null;matchOver=false;mult={a:1,b:1};timerReset();state.mid=(state.mid||0)+1;
+    state.sa=0;state.sb=0;state.crawfordUsed=false;state.cube=1;state.owner=null;pending=null;matchOver=false;mult={a:1,b:1};timerReset();state.curGames=[];state.gmark=0;state.mid=(state.mid||0)+1;
   }
   function newMatch(){
     if(!matchOver&&(state.sa||state.sb)&&!confirm("دست جاری ناتمام است و نتیجه‌اش ثبت نمی‌شود. ادامه می‌دهید؟"))return;
-    push();resetMatch();timerStart();addLog(`دست جدید: ${nm('a')} و ${nm('b')}`);done();
+    push();resetMatch();timerStart();addLog(`شروع دست جدید: ${nm('a')} و ${nm('b')} (ساعت ${ftime()})`);done();
   }
   function setPair(which,val){
     const v=parseInt(val,10);
@@ -512,12 +525,15 @@
   function exportSave(){saveFile("backgammon_3p_save.json",JSON.stringify(state,null,2),"application/json");}
   function exportCsv(){
     const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
-    const rows=[['ردیف','تاریخ پایان','ساعت پایان','بازیکن اول','امتیاز اول','بازیکن دوم','امتیاز دوم','برنده','مدت (ثانیه)','مدت (دقیقه:ثانیه)']];
+    const rows=[['ردیف دست','تاریخ پایان','ساعت پایان','بازیکن اول','امتیاز اول','بازیکن دوم','امتیاز دوم','برنده دست','مدت دست (ثانیه)','مدت دست (دقیقه:ثانیه)','شماره بازی','برنده بازی','بازنده بازی','نوع برد','امتیاز بازی','مدت بازی (ثانیه)','مدت بازی (دقیقه:ثانیه)']];
     state.matches.forEach((m,i)=>{
       const d=m.end?new Date(m.end):null;
       let dd='',tt='';
       if(d){try{dd=d.toLocaleDateString('fa-IR');tt=d.toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});}catch(e){dd=d.toLocaleDateString();tt=d.toLocaleTimeString();}}
-      rows.push([i+1,dd,tt,m.na!=null?m.na:dn(m.a),m.sa,m.nb!=null?m.nb:dn(m.b),m.sb,m.nw!=null?m.nw:dn(m.w),m.dur!=null?m.dur:'',m.dur!=null?fmt(m.dur):'']);
+      const base=[i+1,dd,tt,m.na!=null?m.na:dn(m.a),m.sa,m.nb!=null?m.nb:dn(m.b),m.sb,m.nw!=null?m.nw:dn(m.w),m.dur!=null?m.dur:'',m.dur!=null?fmt(m.dur):''];
+      const gs=m.games||[];
+      if(!gs.length)rows.push(base.concat(['','','','','','','']));
+      gs.forEach(g=>rows.push(base.concat([g.n,g.nw,g.nl,kindLbl(g.k),g.pts,g.dur,fmt(g.dur)])));
     });
     saveFile("backgammon_results.csv",'\uFEFF'+rows.map(r=>r.map(q).join(',')).join('\r\n'),"text/csv;charset=utf-8");
   }
@@ -575,7 +591,7 @@
     el('winPanel').style.opacity=el('doubleRow').style.opacity=(pending||matchOver)?.45:1;
     el('btnUndo').disabled=!undoStack.length;el('btnRedo').disabled=!redoStack.length;
     const mb=el('matchBanner');
-    if(matchOver){const w=state.sa>=state.target?'a':'b';el('matchBannerTitle').textContent=`دست با برد ${nm(w)} به پایان رسید 🏆`;mb.style.display='block';}
+    if(matchOver){const w=state.sa>=state.target?'a':'b';el('matchBannerTitle').textContent=`دست با برد ${nm(w)} به پایان رسید 🏆 (مدت: ${fa(fmt(state.timer.elapsed/1000))})`;mb.style.display='block';}
     else mb.style.display='none';
     const ms=state.matches;
     const tot=ms.reduce((a,m)=>a+(m.dur||0),0);
@@ -583,8 +599,9 @@
     el('results').innerHTML=ms.length?ms.slice().reverse().map((m,k)=>{
       const n=ms.length-k,A=m.na!=null?m.na:dn(m.a),B=m.nb!=null?m.nb:dn(m.b),W=m.nw!=null?m.nw:dn(m.w);
       const meta=(m.dur!=null||m.end)?`<div class="meta">${m.dur!=null?'⏱ '+fa(fmt(m.dur)):''}${m.end?' · '+fdate(m.end):''}</div>`:'';
-      return `<div class="row">${fa(n)}. ${esc(A)} ${fa(m.sa)} — ${fa(m.sb)} ${esc(B)} · برنده: <b>${esc(W)}</b> 🏆${meta}</div>`;
+      return `<div class="row">${fa(n)}. ${esc(A)} ${fa(m.sa)} — ${fa(m.sb)} ${esc(B)} · برنده: <b>${esc(W)}</b> 🏆${meta}${(m.games||[]).map(gameLine).join('')}</div>`;
     }).join(""):'<div class="empty">هنوز دستی تمام نشده است</div>';
+    el('curGames').innerHTML=state.curGames.length?'<div class="section-title" style="margin-top:10px">بازی‌های این دست</div>'+state.curGames.map(gameLine).join(''):'';
     renderTimer();
     const lb=el('logBox');lb.innerHTML=state.log.map(l=>`<div class="line">${esc(l)}</div>`).join("");lb.scrollTop=lb.scrollHeight;
   }
