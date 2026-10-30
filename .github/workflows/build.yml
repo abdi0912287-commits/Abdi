@@ -33,9 +33,33 @@ jobs:
           cp -r node_modules/@fontsource/vazirmatn www/fonts/vazirmatn
           cp -r node_modules/@fontsource/roboto-slab www/fonts/roboto-slab
 
-      - name: Decode release key
+      - name: Decode and Validate Release Key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release-key.jks
+          set -eu
+
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: ANDROID_KEYSTORE_BASE64 is empty."
+            exit 1
+          fi
+
+          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "ERROR: Keystore password or alias is empty."
+            exit 1
+          fi
+
+          printf '%s' "$KEYSTORE_BASE64" |
+            base64 --decode > "$RUNNER_TEMP/release-key.jks"
+
+          test -s "$RUNNER_TEMP/release-key.jks"
+
+          keytool -list \
+            -keystore "$RUNNER_TEMP/release-key.jks" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS"
 
       - name: Add Android
         run: npx cap add android
@@ -44,16 +68,28 @@ jobs:
         run: npx cap sync android
 
       - name: Build signed Release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -eu
+
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: ANDROID_KEY_PASSWORD is empty."
+            exit 1
+          fi
+
           npx cap build android \
             --androidreleasetype APK \
-            --keystorepath "$GITHUB_WORKSPACE/release-key.jks" \
-            --keystorepass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
-            --keystorealias "${{ secrets.ANDROID_KEY_ALIAS }}" \
-            --keystorealiaspass "pass:${{ secrets.ANDROID_KEY_PASSWORD }}"
+            --keystorepath "$RUNNER_TEMP/release-key.jks" \
+            --keystorepass "pass:$KEYSTORE_PASSWORD" \
+            --keystorealias "$KEY_ALIAS" \
+            --keystorealiaspass "pass:$KEY_PASSWORD"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: backgammon-release-apk
           path: android/app/build/outputs/apk/release/*-signed.apk
+          if-no-files-found: error
